@@ -1,0 +1,13 @@
+,filename,type,avg_distance(px)
+0,WT282_2023-04-27_14-23-49DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,WT,2.6803181002254584
+1,WT385_2023-05-05_15-29-36DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,WT,1.9303711116512992
+2,WT279_2023-04-27_14-58-00DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,WT,4.333887541738675
+3,AD602_2023-09-05_17-17-02DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,AD,3.771674443682925
+4,WT267_2023-04-26_15-40-57DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,WT,3.165770024440936
+5,AD599_2023-09-05_09-45-16DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,AD,2.892762783837556
+6,AD600_2023-09-05_10-16-49DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,AD,3.6640987498621724
+7,WT387_2023-05-05_14-50-53DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,WT,2.388545691256991
+8,AD603_2023-09-05_17-01-43DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,AD,4.547080637669389
+9,AD601_2023-09-05_10-01-24DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,AD,3.7575509469576382
+10,AD604_2023-09-05_16-50-07DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,AD,3.8743584074141517
+11,WT386_2023-05-05_14-30-49DLC_resnet50_GridWalkingOct30shuffle1_50000_filtered.csv,WT,2.753570815068838
