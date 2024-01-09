@@ -16,11 +16,20 @@ body_parts = [
     'nose', 'base_neck', 'L_shoulder', 'R_shoulder', 'mid_spine', 
     'L_thigh', 'R_thigh', 'hip', 'mid_tail', 'tail_tip']
 
+lateral_points = ['L_shoulder', 'R_shoulder', 'L_thigh', 'R_thigh']
+
 def rotate_point(x, y, angle):
     angle_rad = math.radians(angle)
     rotated_x = x * math.cos(angle_rad) - y * math.sin(angle_rad)
     rotated_y = x * math.sin(angle_rad) + y * math.cos(angle_rad)
     return rotated_x, rotated_y
+
+def get_dist_arr(xs, ys, threshold=0):
+    dx = np.diff(np.array(xs, dtype=float))
+    dy = np.diff(np.array(ys, dtype=float))
+    spd = np.sqrt(dx**2 + dy**2)
+    spd[spd<threshold] = 0
+    return spd
 
 for cond in ['AD', 'WT']:
     months = glob.glob(os.path.join(analyzed_root, f'{cond}/*'))
@@ -63,5 +72,23 @@ for cond in ['AD', 'WT']:
                 transformed_df[(MODEL_NAME, bp,'likelihood')] = df[(MODEL_NAME, bp,'likelihood')]
             
             transformed_df.to_csv(f"{f[:-3]}_transformed.csv")
+
+            spd_df = pd.DataFrame(columns = lateral_points + ['mov_spd'])
+
+            for lp in lateral_points:
+                lp_df = transformed_df.loc[:, transformed_df.columns.get_level_values(1) == lp]
+                lp_df.columns = lp_df.columns.get_level_values(2)
+                spd_df[lp] = get_dist_arr(lp_df['x'], lp_df['y'], threshold=1)
+            
+            spd_df['mov_spd'] = (get_dist_arr(
+                coords_original['base_neck'][:,0], coords_original['base_neck'][:,1], threshold=0
+            ) + get_dist_arr(
+                coords_original['mid_spine'][:,0], coords_original['mid_spine'][:,1], threshold=0
+            ))/2
+
+            spd_df.to_csv(f"{f[:-3]}_speed.csv")
+
+            
+            
 
                     
