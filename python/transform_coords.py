@@ -24,6 +24,23 @@ def rotate_point(x, y, angle):
     rotated_y = x * math.sin(angle_rad) + y * math.cos(angle_rad)
     return rotated_x, rotated_y
 
+def calc_angle_deg(bp1_xy, bp2_xy):
+    """
+    modified from gaitinference
+    calculates the angle of the orientation of the mouse in degrees, 
+    bp1_xy: x & y coordinates of body part 1 (similar for bp2_xy)
+    the calculated angle (vector) is from bp2 to bp1
+    """
+
+    bp1_xy = np.array(bp1_xy, dtype=float)
+    bp2_xy = np.array(bp2_xy, dtype=float)
+
+    line_offset_xy = bp1_xy - bp2_xy
+
+    angle_rad = np.arctan2(line_offset_xy[:, 1], line_offset_xy[:, 0])
+
+    return angle_rad * (180 / math.pi)
+
 def get_dist_arr(xs, ys, threshold=0):
     dx = np.diff(np.array(xs, dtype=float))
     dy = np.diff(np.array(ys, dtype=float))
@@ -55,38 +72,39 @@ for cond in ['AD', 'WT']:
                     coords[bp][i,0] = coords_original[bp][i,0] - mid_point_x
                     coords[bp][i,1] = coords_original[bp][i,1] - mid_point_y
                 
-                # Calculate rotation angle to align base_neck and mid_spine horizontally
+                # Calculate rotation angle to align base_neck and mid_spine vertically
                 dx = coords['base_neck'][i,0] - coords['mid_spine'][i,0]
                 dy = coords['base_neck'][i,1] - coords['mid_spine'][i,1]
-                angle = math.degrees(math.atan2(-dx, dy))
+                rotate_angle = math.degrees(math.atan2(-dx, dy))
 
                 # Rotate all points
                 for bp in body_parts:
-                    coords[bp][i,0], coords[bp][i,1] = rotate_point(coords[bp][i,0], coords[bp][i,1], -angle)
+                    coords[bp][i,0], coords[bp][i,1] = rotate_point(coords[bp][i,0], coords[bp][i,1], -rotate_angle)
 
                 # print(f"{cond}, {m}")
 
             for bp in body_parts:
-                transformed_df[(MODEL_NAME, bp,'x')] = coords[bp][:,0]
-                transformed_df[(MODEL_NAME, bp,'y')] = coords[bp][:,1]
-                transformed_df[(MODEL_NAME, bp,'likelihood')] = df[(MODEL_NAME, bp,'likelihood')]
+                transformed_df[(MODEL_NAME, bp, 'x')] = coords[bp][:,0]
+                transformed_df[(MODEL_NAME, bp, 'y')] = coords[bp][:,1]
+                transformed_df[(MODEL_NAME, bp, 'likelihood')] = df[(MODEL_NAME, bp,'likelihood')]
             
+            transformed_df[(MODEL_NAME, ' ', 'angel')] = calc_angle_deg(coords_original['base_neck'], coords_original['mid_spine'])
             transformed_df.to_csv(f"{f[:-3]}_transformed.csv")
 
-            spd_df = pd.DataFrame(columns = lateral_points + ['mov_spd'])
+            # spd_df = pd.DataFrame(columns = lateral_points + ['mov_spd'])
 
-            for lp in lateral_points:
-                lp_df = transformed_df.loc[:, transformed_df.columns.get_level_values(1) == lp]
-                lp_df.columns = lp_df.columns.get_level_values(2)
-                spd_df[lp] = get_dist_arr(lp_df['x'], lp_df['y'], threshold=1)
+            # for lp in lateral_points:
+            #     lp_df = transformed_df.loc[:, transformed_df.columns.get_level_values(1) == lp]
+            #     lp_df.columns = lp_df.columns.get_level_values(2)
+            #     spd_df[lp] = get_dist_arr(lp_df['x'], lp_df['y'], threshold=1)
             
-            spd_df['mov_spd'] = (get_dist_arr(
-                coords_original['base_neck'][:,0], coords_original['base_neck'][:,1], threshold=0
-            ) + get_dist_arr(
-                coords_original['mid_spine'][:,0], coords_original['mid_spine'][:,1], threshold=0
-            ))/2
+            # spd_df['mov_spd'] = (get_dist_arr(
+            #     coords_original['base_neck'][:,0], coords_original['base_neck'][:,1], threshold=0
+            # ) + get_dist_arr(
+            #     coords_original['mid_spine'][:,0], coords_original['mid_spine'][:,1], threshold=0
+            # ))/2
 
-            spd_df.to_csv(f"{f[:-3]}_speed.csv")
+            # spd_df.to_csv(f"{f[:-3]}_speed.csv")
 
             
             
