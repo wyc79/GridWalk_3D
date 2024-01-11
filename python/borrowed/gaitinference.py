@@ -1,3 +1,7 @@
+"""
+slightly modified
+"""
+
 import affine
 import argparse
 import h5py
@@ -394,13 +398,15 @@ def trackdet(base_tail_speeds, speed_thresh=5):
         grp_frame_index += grp_count
 
 
-def trackstridedet(lr_paw_speeds, rr_paw_speeds, base_tail_speeds, angular_velocities, cm_per_px=CM_PER_PIXEL):
+def trackstridedet(lr_paw_speeds, rr_paw_speeds, base_tail_speeds, angular_velocities, 
+                   cm_per_px=CM_PER_PIXEL, stationary_percentile=30):
     """
     This function will detect tracks along with the strides that belong to those tracks
     """
-    lr_steps = list(stepdet(lr_paw_speeds, base_tail_speeds))
-    rr_steps = list(stepdet(rr_paw_speeds, base_tail_speeds))
-    tracks = trackdet(base_tail_speeds)
+    lr_steps = list(stepdet(lr_paw_speeds, base_tail_speeds, peakdelta=0.5, approx_still=0))
+    rr_steps = list(stepdet(rr_paw_speeds, base_tail_speeds, peakdelta=0.5, approx_still=0))
+    tracks = trackdet(base_tail_speeds, 
+                      speed_thresh=np.percentile(base_tail_speeds, stationary_percentile))
 
     lr_step_cursor = 0
     rr_step_cursor = 0
@@ -455,6 +461,7 @@ def trackstridedet(lr_paw_speeds, rr_paw_speeds, base_tail_speeds, angular_veloc
             prev_stride_stop = stride_stop
 
         # now we assiciate the right rear paw step with the stride
+        ####### !!!!!!!!!!!!!
         for stride in track.strides:
             for step in track.rrp_steps:
                 if step.stop_frame_exclu > stride.start_frame:
@@ -737,8 +744,9 @@ def mark_bad_strides(tracks, group, cm_per_px=CM_PER_PIXEL):
 
 
 def _smooth(vec, smoothing_window):
+    # changed np.float to np.double because of numpy version
     if smoothing_window <= 1 or len(vec) == 0:
-        return vec.astype(np.float)
+        return vec.astype(np.double)
     else:
         assert smoothing_window % 2 == 1, 'expected smoothing_window to be odd'
         half_conv_len = smoothing_window // 2
@@ -1511,11 +1519,11 @@ def main():
                 group,
                 BASE_TAIL_INDEX,
                 smoothing_window=args.base_tail_smooth)
-            left_rear_paw_speed = calc_speed(group, LEFT_REAR_PAW_INDEX)
-            right_rear_paw_speed = calc_speed(group, RIGHT_REAR_PAW_INDEX)
+            left_rear_paw_speed = calc_speed(group, LEFT_REAR_PAW_INDEX) #cm/s
+            right_rear_paw_speed = calc_speed(group, RIGHT_REAR_PAW_INDEX) #cm/s
 
-            angle_deg = calc_angle_deg(group)
-            angular_speed = list(calc_angle_speed_deg(angle_deg, smoothing_window=5))
+            angle_deg = calc_angle_deg(group) #deg
+            angular_speed = list(calc_angle_speed_deg(angle_deg, smoothing_window=5)) #deg/s
 
             tracks = list(trackstridedet(
                 left_rear_paw_speed,

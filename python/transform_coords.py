@@ -6,6 +6,8 @@ import copy
 import pandas as pd
 import numpy as np
 
+# from gait_analysis import calc_center_speed
+
 dir_path = os.path.dirname(os.path.realpath(__file__))
 os.chdir(dir_path)
 
@@ -88,9 +90,17 @@ for cond in ['AD', 'WT']:
                 transformed_df[(MODEL_NAME, bp, 'y')] = coords[bp][:,1]
                 transformed_df[(MODEL_NAME, bp, 'likelihood')] = df[(MODEL_NAME, bp,'likelihood')]
             
-            transformed_df[(MODEL_NAME, ' ', 'angel')] = calc_angle_deg(coords_original['base_neck'], coords_original['mid_spine'])
-            transformed_df.to_csv(f"{f[:-3]}_transformed.csv")
+            transformed_df[(MODEL_NAME, 'original', 'angle')] = calc_angle_deg(
+                coords_original['base_neck'], coords_original['mid_spine'])
+            # transformed_df[(MODEL_NAME, 'original', 'center_speed')] = calc_center_speed(df, cm_per_px=int, fps=int, smoothing_window=int, start_index=__class__, stop_index=__class__)
+            
 
+            transformed_df[(MODEL_NAME, 'original_base_neck', 'x')] = df[(MODEL_NAME, 'base_neck', 'x')]
+            transformed_df[(MODEL_NAME, 'original_base_neck', 'y')] = df[(MODEL_NAME, 'base_neck', 'y')]
+            transformed_df[(MODEL_NAME, 'original_mid_spine', 'x')] = df[(MODEL_NAME, 'mid_spine', 'x')]
+            transformed_df[(MODEL_NAME, 'original_mid_spine', 'y')] = df[(MODEL_NAME, 'mid_spine', 'y')]
+
+            transformed_df.to_csv(f"{f[:-3]}_transformed.csv")
             # spd_df = pd.DataFrame(columns = lateral_points + ['mov_spd'])
 
             # for lp in lateral_points:
