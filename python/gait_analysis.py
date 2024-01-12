@@ -10,6 +10,9 @@ import scipy.stats
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+
+from scipy.interpolate import interp1d
 
 import borrowed.gaitinference as gait
 # from borrowed.gaitinference import _smooth
@@ -47,6 +50,44 @@ def calc_center_speed(df, start_index=None, stop_index=None, smoothing_window=1,
         smoothing_window=smoothing_window, cm_per_px=cm_per_px, fps=fps)
     return (base_neck_spd + mid_spine_spd)/2
 
+def get_lateral_movement(df, bodypart, tracks, fps=FRAMES_PER_SECOND):
+    for track in tracks:
+        strides = list(track.strides)
+        if len(strides) == 0:
+            # print('None')
+            pass
+        else:
+            for i, stride in enumerate(strides):
+                start_frame = stride.start_frame
+                stop_frame = stride.stop_frame_exclu
+                if stop_frame - start_frame >= fps/2:
+                    sub_df = df[[(bodypart, 'x'), (bodypart, 'y')]].iloc[start_frame:stop_frame,:]
+                    print(f"Frame {i}: {start_frame} --> {stop_frame}")
+            # print(strides)
+            # test_track = track
+            # test_strides = strides
+                    
+def interpolate(original_array, step):
+    original_array = np.array(original_array, dtype=np.double)
+    original_indices = np.linspace(0, 1, len(original_array))
+    new_indices = np.linspace(0, 1, step)
+    interpolation_function = interp1d(original_indices, original_array, kind='linear')
+    interpolated_array = interpolation_function(new_indices)
+    return interpolated_array
+
+def distance_normalize(sub_df, step=100):
+    distance = np.array(np.sqrt(sub_df['x']**2 + sub_df['y']**2), dtype=np.double)
+    # d_min = np.min(distance)
+    # d_max = np.max(distance)
+    # d_norm = (distance - d_min)/(d_max-d_min)
+    d_norm = distance/72
+    return interpolate(d_norm, step)
+
+def x_normalize(sub_df, step=100):
+    # todo: change to normalize by body length? now assumes body length=6cm*12px/cm
+    x_vals = np.array(sub_df['y'], dtype=np.double)
+    x_norm = x_vals/72
+    return interpolate(x_norm, step)
 
 if __name__ == '__main__':
     example_file = \
@@ -73,8 +114,8 @@ if __name__ == '__main__':
         cm_per_px=CM_PER_PIXEL, fps=FRAMES_PER_SECOND)
     
     
-    left_paw_accum = np.zeros(50)
-    right_paw_accum = np.zeros(50)
+    left_paw_accum = np.zeros(100)
+    right_paw_accum = np.zeros(100)
     stride_count = 0
 
     tracks = list(gait.trackstridedet(
@@ -83,35 +124,57 @@ if __name__ == '__main__':
                 center_speed,
                 angular_speed,
                 cm_per_px=CM_PER_PIXEL, 
-                stationary_percentile=10))
+                stationary_percentile=30))
     
-    for track in tracks:
-        strides = list(track.strides)
-        left_steps = track.lrp_steps
-        right_steps = track.rrp_steps
-        if len(strides) >= 1:
-            for stride in strides[1:-1]:
-                gait.accum_steps(left_paw_accum, stride, left_steps)
-                gait.accum_steps(right_paw_accum, stride, right_steps)
-                stride_count += 1
-
-
+    # get_lateral_movement(df, 'tail_tip', tracks)
+    
     # for track in tracks:
     #     strides = list(track.strides)
-    #     if len(strides) == 0:
-    #         print('None')
-    #     else:
-    #         print(strides)
-    #         test_track = track
-    #         test_stride = strides
+    #     left_steps = track.lrp_steps
+    #     right_steps = track.rrp_steps
+    #     if len(strides) >= 1:
+    #         for stride in strides[1:-1]:
+    #             gait.accum_steps(left_paw_accum, stride, left_steps)
+    #             gait.accum_steps(right_paw_accum, stride, right_steps)
+    #             stride_count += 1
 
 
-    if stride_count > 0:
-        left_paw_accum /= stride_count
-        right_paw_accum /= stride_count
 
-    print(left_paw_accum)
-    print(right_paw_accum)
+    fps = 10
+    bodypart = 'nose'
+    step = 100
+    sum_disp = np.zeros(step)
+    stride_count = 0
+    for track in tracks:
+        strides = list(track.strides)
+        if len(strides) == 0:
+            # print('None')
+            pass
+        else:
+            for i, stride in enumerate(strides):
+                start_frame = stride.start_frame
+                stop_frame = stride.stop_frame_exclu
+                if stop_frame - start_frame >= fps/2:
+                    sub_df = df[[(bodypart, 'x'), (bodypart, 'y')]].iloc[start_frame:stop_frame,:]
+                    sub_df.columns = sub_df.columns.droplevel(0)
+                    displacement = distance_normalize(sub_df, step=step)
+                    # displacement = x_normalize(sub_df, step=step)
+                    sum_disp += displacement
+                    plt.plot(displacement, color='gray')
+                    # sum_disp += x_normalize(sub_df, step=step)
+                    stride_count += 1
+    
+    plt.plot(sum_disp/stride_count, color='red')
+
+                    
+
+
+    # if stride_count > 0:
+    #     left_paw_accum /= stride_count
+    #     right_paw_accum /= stride_count
+
+    # print(left_paw_accum)
+    # print(right_paw_accum)
 
     # for step in gait.stepdet(l_speed, center_speed, peakdelta=1, approx_still=0):
     #     print(step.start_frame)
