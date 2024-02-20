@@ -399,12 +399,12 @@ def trackdet(base_tail_speeds, speed_thresh=5):
 
 
 def trackstridedet(lr_paw_speeds, rr_paw_speeds, base_tail_speeds, angular_velocities, 
-                   cm_per_px=CM_PER_PIXEL, stationary_percentile=30):
+                   cm_per_px=CM_PER_PIXEL, stationary_percentile=30, approx_still=5):
     """
     This function will detect tracks along with the strides that belong to those tracks
     """
-    lr_steps = list(stepdet(lr_paw_speeds, base_tail_speeds, peakdelta=0.5, approx_still=0))
-    rr_steps = list(stepdet(rr_paw_speeds, base_tail_speeds, peakdelta=0.5, approx_still=0))
+    lr_steps = list(stepdet(lr_paw_speeds, base_tail_speeds, peakdelta=0.5, approx_still=approx_still))
+    rr_steps = list(stepdet(rr_paw_speeds, base_tail_speeds, peakdelta=0.5, approx_still=approx_still))
     tracks = trackdet(base_tail_speeds, 
                       speed_thresh=np.percentile(base_tail_speeds, stationary_percentile))
 

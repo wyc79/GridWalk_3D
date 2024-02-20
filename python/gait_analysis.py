@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
 import borrowed.gaitinference as gait
+import gait_inference as gin
+import gait_inference_custom as ginc
 # from borrowed.gaitinference import _smooth
 
 # paw_speeds -> pt_spds
@@ -85,7 +87,7 @@ def distance_normalize(sub_df, step=100):
 
 def x_normalize(sub_df, step=100):
     # todo: change to normalize by body length? now assumes body length=6cm*12px/cm
-    x_vals = np.array(sub_df['y'], dtype=np.double)
+    x_vals = np.array(sub_df['x'], dtype=np.double)
     x_norm = x_vals/72
     return interpolate(x_norm, step)
 
@@ -109,8 +111,12 @@ if __name__ == '__main__':
         cm_per_px=CM_PER_PIXEL, fps=FRAMES_PER_SECOND)
     angular_speed = list(gait.calc_angle_speed_deg(
         df[('original', 'angle')], smoothing_window=5))
-    center_speed = calc_center_speed(
-        df, start_index=None, stop_index=None, smoothing_window=1,
+    # center_speed = calc_center_speed(
+    #     df, start_index=None, stop_index=None, smoothing_window=1,
+    #     cm_per_px=CM_PER_PIXEL, fps=FRAMES_PER_SECOND)
+    center_speed = calc_speed(
+        np.array(df[[('hip','x'), ('hip','y')]], dtype=np.double), 
+        start_index=None, stop_index=None, smoothing_window=1,
         cm_per_px=CM_PER_PIXEL, fps=FRAMES_PER_SECOND)
     
     
@@ -124,7 +130,8 @@ if __name__ == '__main__':
                 center_speed,
                 angular_speed,
                 cm_per_px=CM_PER_PIXEL, 
-                stationary_percentile=30))
+                stationary_percentile=30,
+                approx_still=3*np.median(center_speed))) # use average of track
     
     # get_lateral_movement(df, 'tail_tip', tracks)
     
@@ -141,28 +148,34 @@ if __name__ == '__main__':
 
 
     fps = 10
-    bodypart = 'nose'
+    bodypart = 'tail_tip'
     step = 100
     sum_disp = np.zeros(step)
     stride_count = 0
+
+    all_strides = []
     for track in tracks:
         strides = list(track.strides)
         if len(strides) == 0:
             # print('None')
             pass
         else:
+            # change l/r detect logic
+            # backtrack 
             for i, stride in enumerate(strides):
                 start_frame = stride.start_frame
                 stop_frame = stride.stop_frame_exclu
                 if stop_frame - start_frame >= fps/2:
                     sub_df = df[[(bodypart, 'x'), (bodypart, 'y')]].iloc[start_frame:stop_frame,:]
                     sub_df.columns = sub_df.columns.droplevel(0)
-                    displacement = distance_normalize(sub_df, step=step)
-                    # displacement = x_normalize(sub_df, step=step)
+                    # displacement = distance_normalize(sub_df, step=step)
+                    displacement = x_normalize(sub_df, step=step)
                     sum_disp += displacement
                     plt.plot(displacement, color='gray')
                     # sum_disp += x_normalize(sub_df, step=step)
                     stride_count += 1
+                    all_strides = all_strides + [stride]
+
     
     plt.plot(sum_disp/stride_count, color='red')
 

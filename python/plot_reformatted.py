@@ -46,6 +46,7 @@ hue = 'type'
 col = 'loc'
 x = 'month'
 y = 'filtered_mm_per_sec'
+# y = 'ratio'
 
 # y = "cm_per_sec"
 # y = 'ratio'

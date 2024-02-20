@@ -1,3 +1,10 @@
 GridWalking-wyc-2023-10-30/
 
 *.DS_Store
+
+*.pyc
+
+*.TIFF
+*.tiff
+*.csv
+*.png
