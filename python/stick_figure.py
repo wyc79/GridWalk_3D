@@ -29,9 +29,9 @@ skeleton = [
 ]
 
 def rotate_point(x, y, angle):
-    angle_rad = math.radians(angle)
-    rotated_x = x * math.cos(angle_rad) - y * math.sin(angle_rad)
-    rotated_y = x * math.sin(angle_rad) + y * math.cos(angle_rad)
+    angle_rad = np.radians(angle)
+    rotated_x = x * np.cos(angle_rad) - y * np.sin(angle_rad)
+    rotated_y = x * np.sin(angle_rad) + y * np.cos(angle_rad)
     return rotated_x, rotated_y
 
 
@@ -39,31 +39,63 @@ L_length = np.sqrt((df[('L_shoulder', 'x')] - df[('L_thigh', 'x')])**2 + (df[('L
 R_length = np.sqrt((df[('R_shoulder', 'x')] - df[('R_thigh', 'x')])**2 + (df[('R_shoulder', 'y')] - df[('R_thigh', 'y')])**2)
 ratio = L_length/R_length
 
+
 coords_original = {part: df[part][['x', 'y']].values for part in body_parts}
 coords = copy.deepcopy(coords_original)
 
-for i in range(df.shape[0]):
-    mid_point_x = (coords_original['mid_spine'][i,0] + coords_original['base_neck'][i,0]) / 2
-    mid_point_y = (coords_original['mid_spine'][i,1] + coords_original['base_neck'][i,1]) / 2
-    
-    # Translate all points
-    for bp in body_parts:
-        coords[bp][i,0] = coords_original[bp][i,0] - mid_point_x
-        coords[bp][i,1] = coords_original[bp][i,1] - mid_point_y
-    
-    # Calculate rotation angle to align base_neck and mid_spine horizontally
-    dx = coords['base_neck'][i,0] - coords['mid_spine'][i,0]
-    dy = coords['base_neck'][i,1] - coords['mid_spine'][i,1]
-    angle = math.degrees(math.atan2(-dx, dy))
+center_point1 = 'mid_spine'
+center_point2 = 'hip'
+mid_point_x = (coords_original[center_point1][:,0] + coords_original[center_point2][:,0]) / 2
+mid_point_y = (coords_original[center_point1][:,1] + coords_original[center_point2][:,1]) / 2
 
-    # Rotate all points
-    for bp in body_parts:
-        coords[bp][i,0], coords[bp][i,1] = rotate_point(coords[bp][i,0], coords[bp][i,1], -angle)
+for bp in body_parts:
+    coords[bp][:,0] = coords_original[bp][:,0] - mid_point_x
+    coords[bp][:,1] = coords_original[bp][:,1] - mid_point_y
+
+dx = coords[center_point1][:,0] - coords[center_point2][:,0]
+dy = coords[center_point1][:,1] - coords[center_point2][:,1]
+angle = np.degrees(np.arctan2(-dx, dy))
+
+for bp in body_parts:
+    coords[bp][:,0], coords[bp][:,1] = rotate_point(coords[bp][:,0], coords[bp][:,1], -angle)
+
+# for i in range(df.shape[0]):
+#     mid_point_x = (coords_original[center_point1][i,0] + coords_original[center_point2][i,0]) / 2
+#     mid_point_y = (coords_original[center_point1][i,1] + coords_original[center_point2][i,1]) / 2
+    
+#     # Translate all points
+#     for bp in body_parts:
+#         coords[bp][i,0] = coords_original[bp][i,0] - mid_point_x
+#         coords[bp][i,1] = coords_original[bp][i,1] - mid_point_y
+    
+#     # Calculate rotation angle to align base_neck and mid_spine horizontally
+#     dx = coords[center_point1][i,0] - coords[center_point2][i,0]
+#     dy = coords[center_point1][i,1] - coords[center_point2][i,1]
+#     angle = np.degrees(np.arctan2(-dx, dy))
+
+#     # Rotate all points
+#     for bp in body_parts:
+#         coords[bp][i,0], coords[bp][i,1] = rotate_point(coords[bp][i,0], coords[bp][i,1], -angle)
 
 
 xmax = df[body_parts[0]]['x'].max() + 50
 ymax = df[body_parts[0]]['y'].max() + 50
 
+point1 = "mid_spine"
+point2 = "hip"
+point1_coords = np.array(coords[point1], dtype=np.double)
+point2_coords = np.array(coords[point2], dtype=np.double)
+body_angles = [90-math.atan2(p2[1]-p1[1], p2[0]-p1[0])/math.pi*180 
+            for p1, p2 in zip(point1_coords, point2_coords)]
+body_angles = [360-ang if ang>180 else ang for ang in body_angles]
+
+def perpendicular_distance(point, line_point1, line_point2):
+    x1 = point[:,0]; y1 = point[:,1]
+    x2 = line_point1[:,0]; y2 = line_point1[:,1]
+    x3 = line_point2[:,0]; y3 = line_point2[:,1]
+    numerator = (y3-y2)*x1-(x3-x2)*y1+x3*y2-y3*x2
+    denominator = ((y3 - y2)**2 + (x3 - x2)**2)**0.5
+    return numerator / denominator
 
 fig = plt.figure(figsize=(12, 6))
 gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1])  # Left subplot twice as wide as the right
@@ -101,7 +133,17 @@ def update_plot(frame_num):
 
     # ax1.set_title('Original Coordinates')
     get_val = lambda arr: np.round(arr[frame_num],2)
-    ax2.set_title(f'L_length={get_val(L_length)}, R_length={get_val(R_length)}, LR_ratio={get_val(ratio)}')
+    ang = get_val(body_angles)
+    if ang > 150:
+        c = 'r'
+    else:
+        c = 'k'
+    ppd = perpendicular_distance(
+        np.array(coords['tail_tip'], dtype=np.double), 
+        np.array(coords['mid_spine'], dtype=np.double), 
+        np.array(coords['hip'], dtype=np.double))
+    # ax2.set_title(f'L_length={get_val(L_length)}, R_length={get_val(R_length)}, LR_ratio={get_val(ratio)}, angle={ang}', color=c)
+    ax2.set_title(f"tailtip_x={get_val(coords['tail_tip'][:, 0])}, ppd={get_val(ppd)}")
 
     dx = coords_original['hip'][frame_num, 0] - coords_original['mid_spine'][frame_num-1, 0]
     dy = coords_original['hip'][frame_num, 1] - coords_original['mid_spine'][frame_num-1, 1]

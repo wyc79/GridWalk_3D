@@ -8,3 +8,19 @@ GridWalking-wyc-2023-10-30/
 *.tiff
 *.csv
 *.png
+
+*.mp4
+*.h5
+*.avi
+
+*.pickle
+*.h5
+*.mp4
+*.csv
+
+*.png
+*.mat
+# *.yaml
+*.xlsx
+
+!*/config.yaml
