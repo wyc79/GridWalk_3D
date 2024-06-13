@@ -2,6 +2,7 @@ import os
 import math
 import glob
 import itertools
+from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
@@ -12,9 +13,12 @@ from scipy.optimize import curve_fit
 
 from pyestimate import sin_param_estimate
 
+import scipy.fftpack as fftpack
+
 
 FRAMES_PER_SECOND = 10
 CM_PER_PIXEL = 19.5 * 2.54 / 400
+TRACK_MIN = 50
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 os.chdir(dir_path)
@@ -140,19 +144,22 @@ def normalized_displacement(file):
         center_speed, fps=FRAMES_PER_SECOND,
         speed_thresh=np.percentile(center_speed, 20))
     
+    # track_start_end_points = []
     track_mask = np.zeros(df.shape[0], dtype=bool)
     for track in tracks:
         start = track.start_frame
         end = track.stop_frame_exclu
         track_len = end-start
-        if np.sum(angle_mask[start:end]) > track_len * 0.8:
+        if (np.sum(angle_mask[start:end]) > track_len * 0.8) and\
+            (end-start>TRACK_MIN):
             track_mask[start:end] = True
             # print(f"{start} - {end}: {end-start} frs")
+            # track_start_end_points += [(start, end)]
 
     track_df = df[track_mask]
 
-    diff_thigh = np.array(track_df[[('L_thigh', 'x'), ('L_thigh', 'y')]], dtype=np.double) - \
-        np.array(track_df[[('R_thigh', 'x'), ('R_thigh', 'y')]], dtype=np.double)
+    diff_thigh = np.array(df[[('L_thigh', 'x'), ('L_thigh', 'y')]], dtype=np.double) - \
+        np.array(df[[('R_thigh', 'x'), ('R_thigh', 'y')]], dtype=np.double)
     mean_thigh_width = np.nanmean(np.sqrt(diff_thigh[:,0]**2 + diff_thigh[:,1]**2))
     # norm_x = track_df[(poi, 'x')]/mean_thigh_width
     # abs_norm_x = np.abs(norm_x)
@@ -173,6 +180,36 @@ def normalized_displacement(file):
         np.array(track_df[[('hip', 'x'), ('hip', 'y')]], dtype=np.double))
     ppd_midtail = ppd_midtail / mean_thigh_width
 
+    sho2thg_L = np.sqrt(
+        (track_df[('L_shoulder', 'x')] - track_df[('L_thigh', 'x')])**2 + \
+        (track_df[('L_shoulder', 'y')] - track_df[('L_thigh', 'y')])**2
+        )/mean_thigh_width
+    sho2thg_R = np.sqrt(
+        (track_df[('R_shoulder', 'x')] - track_df[('R_thigh', 'x')])**2 + \
+        (track_df[('R_shoulder', 'y')] - track_df[('R_thigh', 'y')])**2
+        )/mean_thigh_width
+    
+    hip_ang = []
+    for a,b,c in zip(
+        np.array(track_df[[('mid_spine', 'x'), ('mid_spine', 'y')]]), 
+        np.array(track_df[[('hip', 'x'), ('hip', 'y')]]), 
+        np.array(track_df[[('mid_tail', 'x'), ('mid_tail', 'y')]])):
+        hip_ang.append(angle_between_three_points(a,b,c))
+    
+    sho_ang = []
+    for a,b,c in zip(
+        np.array(track_df[[('L_shoulder', 'x'), ('L_shoulder', 'y')]]), 
+        np.array(track_df[[('mid_spine', 'x'), ('mid_spine', 'y')]]), 
+        np.array(track_df[[('R_shoulder', 'x'), ('R_shoulder', 'y')]])):
+        sho_ang.append(angle_between_three_points(a,b,c))
+    
+    tail_ang = []
+    for a,b,c in zip(
+        np.array(track_df[[('hip', 'x'), ('hip', 'y')]]), 
+        np.array(track_df[[('mid_tail', 'x'), ('mid_tail', 'y')]]), 
+        np.array(track_df[[('tail_tip', 'x'), ('tail_tip', 'y')]])):
+        tail_ang.append(angle_between_three_points(a,b,c))
+
     counts, _ = np.histogram(x_hip, bins=bins)
     # print(file)
     disp_df = pd.DataFrame({
@@ -183,18 +220,47 @@ def normalized_displacement(file):
         "ppd_tailtip": np.array(ppd_tailtip, dtype=np.double),
         "ppd_midtail": np.array(ppd_midtail, dtype=np.double),
         "thigh_width": np.array([mean_thigh_width]*len(x_hip), dtype=np.double),
+        "sho2thg_L": np.array(sho2thg_L, dtype=np.double),
+        "sho2thg_R": np.array(sho2thg_R, dtype=np.double),
+        "sho_ang": np.array(sho_ang, dtype=np.double),
+        "hip_ang": np.array(hip_ang, dtype=np.double),
+        "tail_ang": np.array(tail_ang, dtype=np.double),
     })
     count_df = pd.DataFrame({
         "bin_center": (bins[1:] + bins[:-1])/2,
-        "counts": counts/np.sum(track_mask)
+        "counts": 0 if np.sum(track_mask)==0 else counts/np.sum(track_mask)
     })
     meta_df = pd.DataFrame({
-        "selected_timepoints": [np.sum(track_mask)],
+        "selected_timepoints": [0 if np.sum(track_mask)==0 else np.sum(track_mask)],
         "n_timepoints": [len(track_mask)],
         "selection_ratio": [np.sum(track_mask)/len(track_mask)],
         "thigh_width": [mean_thigh_width],
     })
     return disp_df, count_df, meta_df
+
+def angle_between_three_points(A, B, C):
+    # Convert points to numpy arrays
+    A, B, C = np.array(A), np.array(B), np.array(C)
+
+    if (A == B).all() or (B == C).all() or (A == C).all():
+        return 0
+    
+    # Vectors BA and BC
+    BA = A - B
+    BC = C - B
+    
+    # Dot product and magnitudes of vectors
+    dot_product = np.dot(BA, BC)
+    magnitude_BA = np.linalg.norm(BA)
+    magnitude_BC = np.linalg.norm(BC)
+    
+    # Calculate the angle in radians
+    cos_theta = dot_product / (magnitude_BA * magnitude_BC)
+    theta = np.arccos(cos_theta)  # Angle in radians
+    
+    # Convert radians to degrees
+    theta_degrees = np.degrees(theta)
+    return theta_degrees
 
 def plot_compare(disp_df_all, res_row, cycle_location, fs):
     start = int(res_row["start"])
@@ -203,9 +269,10 @@ def plot_compare(disp_df_all, res_row, cycle_location, fs):
     freq = res_row["frequency"]
     phase = res_row["phase"]
     print(f"amp:{amp}, freq:{freq}, phase:{phase}")
-    ts = disp_df_all["time_points"][start:end]
+    sig = disp_df_all[cycle_location][start:end]
+    ts = np.arange(len(sig))
     fig, ax = plt.subplots(1,1, figsize=[10, 4], constrained_layout=True)
-    ax.plot(ts/fs, disp_df_all[cycle_location][start:end], label=cycle_location)
+    ax.plot(ts/fs, sig, label=cycle_location)
     # ax.plot(ts/fs, amp*np.sin(freq*ts+phase), 'r--', label='fitted sine')
     ax.plot(ts/fs, amp*np.cos(2*np.pi*freq*ts+phase), 'r--', label='fitted sine')
     ax.legend()
@@ -250,18 +317,18 @@ if __name__ == "__main__":
                 meta_df["filename"] = file.split('/')[-1]
                 meta_df_all = pd.concat([meta_df_all, meta_df])
                 meta_df_all = meta_df_all.reset_index(drop=True)
-
             #     counts_all[(cond, mon)] = counts_all[(cond, mon)] + [counts]
             # counts_all[(cond, mon)] = np.array(counts_all[(cond, mon)])
-
 
     disp_df_all.to_csv(f"gait/horizontal_displacement.csv")
     count_df_all.to_csv(f"gait/histogram_counts.csv")
     meta_df_all.to_csv(f"gait/meta.csv")
 
+    print("Start calculating sin parameters ......")
+
     cycle_location = "x_midtail"
     
-    l = 100
+    l = TRACK_MIN
     count = 0
     i = 0
     tolerance = 5
@@ -271,33 +338,70 @@ if __name__ == "__main__":
         end = i + l
         if end < disp_df_all.shape[0] and \
             (disp_df_all["time_points"][end] - disp_df_all["time_points"][start] <= l + tolerance) and \
-            (disp_df_all["time_points"][end] - disp_df_all["time_points"][start] > 0):
+            (disp_df_all["time_points"][end] - disp_df_all["time_points"][start] > 0) and\
+            (disp_df_all["filename"][end] == disp_df_all["filename"][start]):
             count += 1
             start_end_points += [(start, end)]
             i = end
         else:
             i += 1
     
-    res_df = pd.DataFrame()
-    for i, (start, end) in enumerate(start_end_points):
+    print("Signal segmented, estimating sin parameters ......")
+    
+    fit_df = pd.DataFrame()
+    avg_df = pd.DataFrame()
+    for i, (start, end) in tqdm(enumerate(start_end_points)):
         # ts = disp_df_all["time_points"][start:end]
         # plt.plot(ts, disp_df_all["x_hip"][start:end], label="x_hip")
+        sub_df = disp_df_all[start:end].reset_index(drop=True)
         amp,f,phi = sin_param_estimate(
-            disp_df_all[cycle_location][start:end], use_fft=False, detrend_type='linear')
+            sub_df[cycle_location], use_fft=False, 
+            brute_Ns=10000, detrend_type='linear')
         freq = 2*np.pi*f
+        # fname = disp_df_all["filename"][start]
         phase = phi+np.pi/2
         if phase > np.pi:
             phase = phase - np.pi
-        res_row = pd.DataFrame({
+        fit_row = pd.DataFrame({
             "start":start, "end":end, 
-            "amplitude":amp, "frequency":f, "phase":phi
+            "amplitude":amp, "frequency":f, "phase":phi,
+            "filename": sub_df["filename"][0]
         }, index=[i])
-        res_df = pd.concat([res_df, res_row])
-    res_df.to_csv(f"gait/sin_params_{cycle_location}.csv")
+        fit_df = pd.concat([fit_df, fit_row])
+        avg_vals = sub_df.mean(numeric_only=True)
+        avg_row = pd.DataFrame({
+            "filename": sub_df["filename"][0],
+            "condition": sub_df["condition"][0],
+            "month": sub_df["month"][0],
+            "len_track": len(sub_df),
+            "mean_sho2thg_L": avg_vals["sho2thg_L"],
+            "mean_sho2thg_R": avg_vals["sho2thg_R"],
+            "mean_sho_ang": avg_vals["sho_ang"],
+            "mean_hip_ang": avg_vals["hip_ang"],   
+            "mean_tail_ang": avg_vals["tail_ang"],   
+            "mean_thigh_width": avg_vals["thigh_width"]
+        }, index=[i])
+        avg_df = pd.concat([avg_df, avg_row])
+    fit_df.to_csv(f"gait/sin_params_{cycle_location}.csv")
+    avg_df.to_csv(f"gait/tracks_vals.csv")
 
+    avg_res_df = fit_df.groupby("filename").mean()
+    avg_res_df = avg_res_df.merge(meta_df_all, how="inner", left_index=True, right_on="filename")
+    avg_res_df = avg_res_df.drop(["start", "end"], axis=1)
 
+    avg_res_df.to_csv(f"gait/avg_sin_params_{cycle_location}.csv")
 
-    plot_compare(disp_df_all, res_df.iloc[0,:], cycle_location, 10)
+    plot_compare(disp_df_all, fit_df.iloc[1,:], cycle_location, 10)
+    
+
+        
+# (disp_df_all["filename"][end] == disp_df_all["filename"][start]):
+    # amplitude, frequency, phase = sin_param_estimate(
+    #     disp_df_all[cycle_location][start:end], use_fft=False, 
+    #     brute_Ns=10000, detrend_type='linear')
+
+    # plot_compare(disp_df_all, pd.DataFrame({"start":start, "end":end, 
+    #     "amplitude":amplitude, "frequency":frequency, "phase":phase}, index=[0]), cycle_location, 10)
 
 
     # start = start_end_points[0][0]
